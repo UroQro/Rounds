@@ -44,22 +44,23 @@ import {
   X
 } from 'lucide-react';
 
-// --- Firebase Configuration (Llaves Integradas) ---
+// --- Firebase Configuration ---
+// ESTRATEGIA HÍBRIDA: Intenta leer variables de entorno (Vercel), 
+// si no existen, usa las llaves directas (Hardcoded) como respaldo.
 const firebaseConfig = {
-  apiKey: "AIzaSyBRLd0733PS3-K9XEeupa7hRGyxnDzbvlU",
-  authDomain: "rounds-75bc9.firebaseapp.com",
-  projectId: "rounds-75bc9",
-  storageBucket: "rounds-75bc9.firebasestorage.app",
-  messagingSenderId: "1004112669730",
-  appId: "1:1004112669730:web:2cab219b5be824aaedee7b",
-  measurementId: "G-98S23R4WVL"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBRLd0733PS3-K9XEeupa7hRGyxnDzbvlU",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "rounds-75bc9.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "rounds-75bc9",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "rounds-75bc9.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "1004112669730",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:1004112669730:web:2cab219b5be824aaedee7b",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-98S23R4WVL"
 };
 
-// Inicialización
+// Inicialización segura
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-// ID de la aplicación para separar datos
 const appId = 'urorounds-prod'; 
 
 // --- Constants & Helpers ---
@@ -180,6 +181,7 @@ export default function UroRounds() {
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [operationLoading, setOperationLoading] = useState(false);
   const [dischargeTarget, setDischargeTarget] = useState(null); 
+  const [connectionError, setConnectionError] = useState(''); // New state for connection errors
 
   // Login States
   const [username, setUsername] = useState('');
@@ -215,12 +217,19 @@ export default function UroRounds() {
         await signInAnonymously(auth);
       } catch (e) {
         console.error("Auth init error", e);
+        setConnectionError("Error de conexión con Firebase: " + e.message + ". Verifica que 'Anonymous Auth' esté habilitado en la consola de Firebase.");
+        setAuthLoading(false);
       }
     };
     initAuth();
     
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setFirebaseUser(user);
+      if (user) {
+        setFirebaseUser(user);
+        setConnectionError('');
+      } else {
+        setFirebaseUser(null);
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -504,6 +513,18 @@ export default function UroRounds() {
       .filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()))
       .sort((a,b) => new Date(b.dischargeDate) - new Date(a.dischargeDate));
   }, [patients, searchTerm]);
+
+  // Si hay error de conexión (Auth fallida), mostrarlo en lugar del loader infinito
+  if (connectionError) {
+     return (
+        <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50 text-slate-600 gap-4 p-8 text-center">
+            <AlertTriangle className="text-red-500 w-16 h-16" />
+            <h1 className="text-2xl font-bold">Error de Conexión</h1>
+            <p className="max-w-md">{connectionError}</p>
+            <p className="text-xs text-slate-400 mt-4">Si eres el administrador, verifica la consola de Firebase.</p>
+        </div>
+     );
+  }
 
   if (authLoading || view === 'loading') return <div className="h-screen w-full flex items-center justify-center bg-slate-50 text-slate-400 font-medium flex-col gap-2"><Loader2 className="animate-spin text-blue-600" size={32} /><span>Conectando a UroRounds...</span></div>;
 

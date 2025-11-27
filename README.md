@@ -19,4 +19,5 @@ Este ZIP contiene todo el código fuente listo para desarrollo local o despliegu
 
 1. Sube este código a un repositorio de GitHub.
 2. Importa el proyecto en Vercel.
-3. ¡Listo! Las claves de Firebase ya están integradas en el código (`App.jsx`).
+3. En la configuración de **Environment Variables** en Vercel, copia el contenido del archivo `vercel_env.txt` que encontrarás en la raíz del proyecto.
+4. ¡Listo!
