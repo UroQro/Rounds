@@ -150,12 +150,15 @@ const FishboneBMP = ({ data }) => {
 
 const FishboneCBC = ({ data }) => {
     if (!data) return null;
-    if (!data.wbc && !data.hb && !data.plt) return null;
+    if (!data.wbc && !data.hb && !data.plt && !data.hct) return null;
     
     return (
         <div className="flex items-center text-xs font-mono font-bold text-slate-800 bg-white p-1 rounded border border-slate-100 w-fit">
             <div className="pr-2 text-blue-700">{data.wbc || '-'}</div>
-            <div className="px-2 border-l-2 border-r-2 border-slate-800 text-slate-900">{data.hb || '-'}</div>
+            <div className="px-2 border-l-2 border-r-2 border-slate-800 text-slate-900 flex flex-col items-center leading-none">
+                <span>{data.hb || '-'}</span>
+                <span className="border-t border-slate-800 w-full text-center pt-0.5 mt-0.5">{data.hct || '-'}</span>
+            </div>
             <div className="pl-2 text-purple-700">{data.plt || '-'}</div>
         </div>
     );
@@ -269,7 +272,7 @@ export default function UroRounds() {
       abxStart: '',
       labData: {
           na: '', k: '', cl: '', bun: '', cr: '', glu: '',
-          wbc: '', hb: '', plt: '',
+          wbc: '', hb: '', hct: '', plt: '',
           tp: '', ttp: '', inr: ''
       }
   });
@@ -492,7 +495,7 @@ export default function UroRounds() {
       
       setNewNote({ 
           text: '', type: 'evolution', link: '', abxStart: '',
-          labData: { na: '', k: '', cl: '', bun: '', cr: '', glu: '', wbc: '', hb: '', plt: '', tp: '', ttp: '', inr: '' }
+          labData: { na: '', k: '', cl: '', bun: '', cr: '', glu: '', wbc: '', hb: '', hct: '', plt: '', tp: '', ttp: '', inr: '' }
       });
       setFormData(prev => ({ ...prev, notes: updatedNotes }));
 
@@ -550,7 +553,7 @@ export default function UroRounds() {
       if (lastLabNote) {
           if (lastLabNote.labData) {
               const d = lastLabNote.labData;
-              lastLabText = `Cr:${d.cr} BUN:${d.bun} WBC:${d.wbc} Hb:${d.hb} Plt:${d.plt}`;
+              lastLabText = `Cr:${d.cr} BUN:${d.bun} WBC:${d.wbc} Hb:${d.hb} Hct:${d.hct} Plt:${d.plt}`;
           } else {
               lastLabText = lastLabNote.text;
           }
@@ -684,6 +687,7 @@ export default function UroRounds() {
                               <div className="mb-2 flex flex-wrap gap-1">
                                   {d.wbc && <span className="text-[9px] font-mono bg-blue-50 text-blue-700 px-1 rounded border border-blue-100">WBC:{d.wbc}</span>}
                                   {d.hb && <span className="text-[9px] font-mono bg-red-50 text-red-700 px-1 rounded border border-red-100">Hb:{d.hb}</span>}
+                                  {d.hct && <span className="text-[9px] font-mono bg-red-50 text-red-700 px-1 rounded border border-red-100">Hct:{d.hct}</span>}
                                   {d.cr && <span className="text-[9px] font-mono bg-slate-100 text-slate-600 px-1 rounded border border-slate-200">Cr:{d.cr}</span>}
                               </div>
                           ) : null;
@@ -877,10 +881,11 @@ export default function UroRounds() {
                                  <div className="bg-white border border-slate-200 rounded-lg p-2 animate-in fade-in">
                                      <h4 className="text-[10px] font-bold text-blue-600 uppercase mb-2">Ingresar Valores</h4>
                                      
-                                     {/* BH - 3 COLS */}
-                                     <div className="grid grid-cols-3 gap-2 mb-2 bg-slate-50 p-2 rounded">
+                                     {/* BH - 4 COLS */}
+                                     <div className="grid grid-cols-4 gap-2 mb-2 bg-slate-50 p-2 rounded">
                                          <Input label="WBC" placeholder="10.5" value={newNote.labData.wbc} onChange={e => updateLabData('wbc', e.target.value)} className="text-center"/>
                                          <Input label="Hb" placeholder="14" value={newNote.labData.hb} onChange={e => updateLabData('hb', e.target.value)} className="text-center"/>
+                                         <Input label="Hct" placeholder="42" value={newNote.labData.hct} onChange={e => updateLabData('hct', e.target.value)} className="text-center"/>
                                          <Input label="Plt" placeholder="250" value={newNote.labData.plt} onChange={e => updateLabData('plt', e.target.value)} className="text-center"/>
                                      </div>
 
