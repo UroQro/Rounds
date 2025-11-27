@@ -45,8 +45,6 @@ import {
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
-// ESTRATEGIA HÍBRIDA: Intenta leer variables de entorno (Vercel), 
-// si no existen, usa las llaves directas (Hardcoded) como respaldo.
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBRLd0733PS3-K9XEeupa7hRGyxnDzbvlU",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "rounds-75bc9.firebaseapp.com",
@@ -325,7 +323,11 @@ export default function UroRounds() {
       }
     } catch (err) {
       console.error(err);
-      setLoginError(err.message);
+      if (err.code === 'permission-denied') {
+        setLoginError('Error de permisos: Faltan reglas en Firestore. Revisa el README para configurarlas.');
+      } else {
+        setLoginError(err.message);
+      }
     } finally {
       setOperationLoading(false);
     }
@@ -383,7 +385,11 @@ export default function UroRounds() {
       }
     } catch (e) {
       console.error(e);
-      alert('Error al guardar: ' + e.message);
+      if (e.code === 'permission-denied') {
+        alert('Error de permisos: Configura las Reglas de Firestore en tu consola de Firebase.');
+      } else {
+        alert('Error al guardar: ' + e.message);
+      }
     } finally {
       setOperationLoading(false);
     }
