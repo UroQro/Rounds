@@ -17,6 +17,7 @@ import {
   query, 
   where,
   getDocs,
+  orderBy,
   serverTimestamp
 } from 'firebase/firestore';
 import { 
@@ -49,7 +50,8 @@ import {
   ListTodo,
   CheckSquare,
   Square,
-  RotateCcw
+  Users,
+  ShieldAlert
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -103,7 +105,6 @@ const NOTE_TYPES = [
 
 const normalizeText = (text) => {
   if (!text) return '';
-  // Elimina acentos y caracteres especiales
   return text.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 };
 
@@ -269,6 +270,10 @@ export default function UroRounds() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
+  // Admin State
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [usersList, setUsersList] = useState([]);
+
   // UI State
   const [isEditingDetails, setIsEditingDetails] = useState(false);
   const [operationLoading, setOperationLoading] = useState(false);
@@ -299,9 +304,9 @@ export default function UroRounds() {
     history: '',
     allergies: '',
     status: 'active',
-    isReentry: false, // Nuevo campo Reingreso
+    isReentry: false, 
     notes: [],
-    todos: [] // Nuevo campo ToDos
+    todos: [] 
   };
   const [formData, setFormData] = useState(initialPatientState);
   
@@ -399,6 +404,39 @@ export default function UroRounds() {
 
     return () => unsubscribe();
   }, [firebaseUser, appUser, selectedPatient?.id, isEditingDetails, dischargeTarget]);
+
+  // --- ADMIN HANDLERS ---
+  const handleOpenAdmin = async () => {
+      const pass = prompt("Ingrese contraseña maestra:");
+      if (pass !== ADMIN_PASSWORD) {
+          alert("Acceso denegado");
+          return;
+      }
+      
+      setOperationLoading(true);
+      try {
+          // Fetch users
+          const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'users'), orderBy("username"));
+          const snapshot = await getDocs(q);
+          const users = snapshot.docs.map(d => ({id: d.id, ...d.data()}));
+          setUsersList(users);
+          setIsAdminOpen(true);
+      } catch (e) {
+          alert("Error al cargar usuarios");
+      } finally {
+          setOperationLoading(false);
+      }
+  };
+
+  const handleDeleteUser = async (userId) => {
+      if (!confirm("¿Eliminar usuario permanentemente?")) return;
+      try {
+          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'users', userId));
+          setUsersList(prev => prev.filter(u => u.id !== userId));
+      } catch (e) {
+          alert("Error al eliminar usuario");
+      }
+  };
 
   // --- Handlers ---
 
@@ -524,47 +562,29 @@ export default function UroRounds() {
   const handleHistorySelect = (e) => {
       const value = e.target.value;
       if (!value) return;
-      
-      // Simple logic: append if not exists
       const current = formData.history || '';
       if (!current.includes(value)) {
           const updated = current ? `${current}, ${value}` : value;
           setFormData({ ...formData, history: updated });
       }
-      // Reset select
       e.target.value = '';
   };
 
-  // --- TODO LOGIC ---
   const handleAddTodo = async (e) => {
       e.preventDefault();
       if (!newTodo.trim() || !selectedPatient) return;
-      
-      const newItem = {
-          id: crypto.randomUUID(),
-          text: newTodo,
-          done: false,
-          createdAt: new Date().toISOString()
-      };
-      
+      const newItem = { id: crypto.randomUUID(), text: newTodo, done: false, createdAt: new Date().toISOString() };
       const updatedTodos = [...(formData.todos || []), newItem];
-      
       try {
-          // Optimistic
           setFormData(prev => ({ ...prev, todos: updatedTodos }));
           setNewTodo('');
           const ref = doc(db, 'artifacts', appId, 'public', 'data', 'patients', selectedPatient.id);
           await updateDoc(ref, { todos: updatedTodos });
-      } catch (err) {
-          console.error(err);
-      }
+      } catch (err) { console.error(err); }
   };
 
   const toggleTodo = async (todoId) => {
-      const updatedTodos = formData.todos.map(t => 
-          t.id === todoId ? { ...t, done: !t.done } : t
-      );
-      
+      const updatedTodos = formData.todos.map(t => t.id === todoId ? { ...t, done: !t.done } : t);
       try {
           setFormData(prev => ({ ...prev, todos: updatedTodos }));
           const ref = doc(db, 'artifacts', appId, 'public', 'data', 'patients', selectedPatient.id);
@@ -778,6 +798,7 @@ export default function UroRounds() {
             <span className="text-lg font-bold text-slate-800 tracking-tight">UroRounds</span>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={handleOpenAdmin} className="text-slate-400 hover:text-blue-600 p-1" title="Gestión Usuarios"><Users size={18}/></button>
             <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-full">{appUser?.username}</span>
             <button onClick={handleLogout} className="text-red-400 hover:text-red-600"><LogOut size={18} /></button>
           </div>
@@ -892,6 +913,35 @@ export default function UroRounds() {
           </div>
         )}
       </main>
+
+      {/* --- ADMIN MODAL --- */}
+      {isAdminOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <h3 className="font-bold text-slate-700 flex items-center gap-2"><ShieldAlert size={18}/> Gestión de Usuarios</h3>
+                <button onClick={() => setIsAdminOpen(false)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
+            </div>
+            <div className="p-4 overflow-y-auto">
+                {usersList.length === 0 ? (
+                    <p className="text-center text-slate-400 text-sm">No hay usuarios registrados</p>
+                ) : (
+                    <div className="space-y-2">
+                        {usersList.map(u => (
+                            <div key={u.id} className="flex justify-between items-center p-3 border border-slate-100 rounded-lg hover:bg-slate-50">
+                                <div>
+                                    <div className="font-bold text-slate-700">{u.username}</div>
+                                    <div className="text-[10px] text-slate-400">ID: {u.id}</div>
+                                </div>
+                                <button onClick={() => handleDeleteUser(u.id)} className="text-red-400 hover:text-red-600 p-2"><Trash2 size={16}/></button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- CONFIRMATION MODAL --- */}
       {dischargeTarget && (
