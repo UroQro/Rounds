@@ -87,7 +87,6 @@ const NOTE_TYPES = [
   { id: 'image', label: 'Img', icon: ImageIcon, color: 'text-green-600' },
 ];
 
-// Calcula la edad
 const calculateAge = (dob) => {
   if (!dob) return '';
   const diff = Date.now() - new Date(dob).getTime();
@@ -95,16 +94,14 @@ const calculateAge = (dob) => {
   return Math.abs(ageDate.getUTCFullYear() - 1970);
 };
 
-// Calcula días de estancia (Fecha actual - Ingreso)
 const calculateStayDays = (admitDate) => {
   if (!admitDate) return 0;
-  // Parseo seguro de fecha local
-  const [y, m, d] = admitDate.split('-').map(Number);
-  const start = new Date(y, m - 1, d);
+  const oneDay = 24 * 60 * 60 * 1000;
+  const start = new Date(admitDate);
   const now = new Date();
   start.setHours(0,0,0,0);
   now.setHours(0,0,0,0);
-  return Math.round(Math.abs((now - start) / (24 * 60 * 60 * 1000)));
+  return Math.round(Math.abs((now - start) / oneDay));
 };
 
 // Calcula días de antibiótico (Fecha actual - Inicio + 1)
@@ -112,7 +109,6 @@ const calculateAntibioticDays = (startDate) => {
   if (!startDate) return 0;
   
   // Parseo manual para evitar problemas de zona horaria (UTC vs Local)
-  // Entrada: "2025-11-27" -> Date(2025, 10, 27) local
   const parts = startDate.split('-');
   if(parts.length !== 3) return 0;
   
@@ -126,14 +122,11 @@ const calculateAntibioticDays = (startDate) => {
   const diffTime = now - start;
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
   
-  // Si inició hoy, es el día 1. Si inició ayer, es el día 2.
   return diffDays + 1;
 };
 
-// Formato de fecha para visualización
 const formatDate = (dateString) => {
   if (!dateString) return '-';
-  // Si viene como YYYY-MM-DD, parsear manualmente para evitar UTC shift
   if (dateString.includes('-') && dateString.length === 10) {
       const [y, m, d] = dateString.split('-');
       return `${d}/${m}/${y}`;
@@ -152,7 +145,7 @@ const formatDateTime = (isoString) => {
   });
 };
 
-// --- FISHBONE COMPONENTS (Compact Version) ---
+// --- FISHBONE COMPONENTS ---
 
 const FishboneBMP = ({ data }) => {
   if (!data) return null;
@@ -502,8 +495,9 @@ export default function UroRounds() {
     if (!selectedPatient) return;
     
     // Validaciones simples
-    if (newNote.type !== 'lab' && !newNote.text) return alert("Escribe algo.");
+    if (newNote.type !== 'lab' && newNote.type !== 'image' && !newNote.text) return alert("Escribe algo.");
     if (newNote.type === 'lab' && !Object.values(newNote.labData).some(x => x)) return alert("Pon algún valor de lab.");
+    if (newNote.type === 'image' && !newNote.link) return alert("Ingresa el link.");
 
     const noteToAdd = {
       id: crypto.randomUUID(),
@@ -954,6 +948,13 @@ export default function UroRounds() {
                                 <input type="date" className="w-full border border-purple-200 rounded px-2 py-1.5 text-xs bg-white" value={newNote.abxStart} onChange={e => setNewNote({...newNote, abxStart: e.target.value})} />
                               </div>
                             )}
+
+                            {newNote.type === 'image' && (
+                               <div className="bg-green-50 p-2 rounded border border-green-100 animate-in fade-in">
+                                <span className="text-[10px] font-bold text-green-700 block mb-1">Link de Imagen / Estudio</span>
+                                <input type="text" className="w-full border border-green-200 rounded px-2 py-1.5 text-xs bg-white" placeholder="Pegar URL aquí (https://...)" value={newNote.link} onChange={e => setNewNote({...newNote, link: e.target.value})} />
+                              </div>
+                            )}
                             
                             <Button onClick={handleAddNote} isLoading={operationLoading} className="w-full py-3 bg-slate-800 hover:bg-slate-900">
                               <Plus size={16} /> Agregar Nota
@@ -1006,7 +1007,7 @@ export default function UroRounds() {
                                  )}
                                  {note.link && (
                                    <a href={note.link} target="_blank" rel="noreferrer" className="mt-2 flex items-center justify-center gap-2 w-full py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded border border-blue-200 hover:bg-blue-100 transition-all">
-                                     <ExternalLink size={14}/> Abrir Link / Imagen
+                                     <ExternalLink size={14}/> TAC
                                    </a>
                                  )}
                                </div>
