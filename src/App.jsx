@@ -87,6 +87,7 @@ const NOTE_TYPES = [
   { id: 'image', label: 'Img', icon: ImageIcon, color: 'text-green-600' },
 ];
 
+// Calcula la edad
 const calculateAge = (dob) => {
   if (!dob) return '';
   const diff = Date.now() - new Date(dob).getTime();
@@ -94,18 +95,49 @@ const calculateAge = (dob) => {
   return Math.abs(ageDate.getUTCFullYear() - 1970);
 };
 
+// Calcula días de estancia (Fecha actual - Ingreso)
 const calculateStayDays = (admitDate) => {
   if (!admitDate) return 0;
-  const oneDay = 24 * 60 * 60 * 1000;
-  const start = new Date(admitDate);
+  // Parseo seguro de fecha local
+  const [y, m, d] = admitDate.split('-').map(Number);
+  const start = new Date(y, m - 1, d);
   const now = new Date();
   start.setHours(0,0,0,0);
   now.setHours(0,0,0,0);
-  return Math.round(Math.abs((now - start) / oneDay));
+  return Math.round(Math.abs((now - start) / (24 * 60 * 60 * 1000)));
 };
 
+// Calcula días de antibiótico (Fecha actual - Inicio + 1)
+const calculateAntibioticDays = (startDate) => {
+  if (!startDate) return 0;
+  
+  // Parseo manual para evitar problemas de zona horaria (UTC vs Local)
+  // Entrada: "2025-11-27" -> Date(2025, 10, 27) local
+  const parts = startDate.split('-');
+  if(parts.length !== 3) return 0;
+  
+  const start = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  const now = new Date();
+  
+  // Resetear horas para comparar solo días
+  start.setHours(0,0,0,0);
+  now.setHours(0,0,0,0);
+  
+  const diffTime = now - start;
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  
+  // Si inició hoy, es el día 1. Si inició ayer, es el día 2.
+  return diffDays + 1;
+};
+
+// Formato de fecha para visualización
 const formatDate = (dateString) => {
   if (!dateString) return '-';
+  // Si viene como YYYY-MM-DD, parsear manualmente para evitar UTC shift
+  if (dateString.includes('-') && dateString.length === 10) {
+      const [y, m, d] = dateString.split('-');
+      return `${d}/${m}/${y}`;
+  }
   const d = new Date(dateString);
   if (isNaN(d.getTime())) return '-';
   return d.toLocaleDateString('es-MX', {
@@ -124,7 +156,6 @@ const formatDateTime = (isoString) => {
 
 const FishboneBMP = ({ data }) => {
   if (!data) return null;
-  // Solo renderiza si hay al menos un dato relevante
   if (!data.na && !data.k && !data.cl && !data.bun && !data.cr && !data.glu) return null;
 
   return (
@@ -970,12 +1001,12 @@ export default function UroRounds() {
 
                                  {note.type === 'antibiotic' && (
                                    <div className="mt-2 inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 text-[10px] font-bold rounded border border-purple-100">
-                                     <Clock size={10}/> Inicio: {note.abxStart ? formatDate(note.abxStart) : 'Indefinido'}
+                                     <Clock size={10}/> Día {calculateAntibioticDays(note.abxStart)} ({formatDate(note.abxStart)})
                                    </div>
                                  )}
                                  {note.link && (
-                                   <a href={note.link} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-700 text-[10px] font-bold rounded border border-blue-100 hover:underline">
-                                     <ExternalLink size={10}/> Ver Estudio
+                                   <a href={note.link} target="_blank" rel="noreferrer" className="mt-2 flex items-center justify-center gap-2 w-full py-2 bg-blue-50 text-blue-700 text-xs font-bold rounded border border-blue-200 hover:bg-blue-100 transition-all">
+                                     <ExternalLink size={14}/> Abrir Link / Imagen
                                    </a>
                                  )}
                                </div>
