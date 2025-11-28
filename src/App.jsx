@@ -44,7 +44,8 @@ import {
   X,
   Droplet,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Thermometer
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -80,6 +81,7 @@ const CATEGORIES = [
 
 const NOTE_TYPES = [
   { id: 'evolution', label: 'Evol.', icon: FileText, color: 'text-slate-600' },
+  { id: 'vitals', label: 'Vitales', icon: Activity, color: 'text-rose-500' }, // Nuevo tipo
   { id: 'lab', label: 'Labs', icon: Microscope, color: 'text-blue-600' },
   { id: 'culture', label: 'Cultivo', icon: FlaskConical, color: 'text-pink-600' },
   { id: 'antibiotic', label: 'ABX', icon: Syringe, color: 'text-purple-600' },
@@ -280,7 +282,7 @@ export default function UroRounds() {
   };
   const [formData, setFormData] = useState(initialPatientState);
   
-  // Note State
+  // Note State - Includes Lab and Vital Data
   const [newNote, setNewNote] = useState({ 
       text: '', 
       type: 'evolution', 
@@ -290,6 +292,9 @@ export default function UroRounds() {
           na: '', k: '', cl: '', bun: '', cr: '', glu: '',
           wbc: '', hb: '', hct: '', plt: '',
           tp: '', ttp: '', inr: ''
+      },
+      vitalData: {
+          ta: '', temp: '', fc: '', uresis: '', drains: ''
       }
   });
 
@@ -482,12 +487,20 @@ export default function UroRounds() {
       }));
   };
 
+  const updateVitalData = (field, value) => {
+      setNewNote(prev => ({
+          ...prev,
+          vitalData: { ...prev.vitalData, [field]: value }
+      }));
+  };
+
   const handleAddNote = async (e) => {
     if(e) e.preventDefault(); 
     if (!selectedPatient) return;
     
-    if (newNote.type !== 'lab' && newNote.type !== 'image' && !newNote.text) return alert("Escribe algo.");
+    if (newNote.type !== 'lab' && newNote.type !== 'image' && newNote.type !== 'vitals' && !newNote.text) return alert("Escribe algo.");
     if (newNote.type === 'lab' && !Object.values(newNote.labData).some(x => x)) return alert("Pon algún valor de lab.");
+    if (newNote.type === 'vitals' && !Object.values(newNote.vitalData).some(x => x)) return alert("Pon algún signo vital.");
     if (newNote.type === 'image' && !newNote.link) return alert("Ingresa el link.");
 
     const noteToAdd = {
@@ -497,6 +510,7 @@ export default function UroRounds() {
       link: newNote.link || null,
       abxStart: newNote.type === 'antibiotic' ? newNote.abxStart : null,
       labData: newNote.type === 'lab' ? newNote.labData : null,
+      vitalData: newNote.type === 'vitals' ? newNote.vitalData : null,
       timestamp: new Date().toISOString(),
       author: appUser?.username || 'Dr.',
       deleted: false
@@ -512,7 +526,8 @@ export default function UroRounds() {
       
       setNewNote({ 
           text: '', type: 'evolution', link: '', abxStart: '',
-          labData: { na: '', k: '', cl: '', bun: '', cr: '', glu: '', wbc: '', hb: '', hct: '', plt: '', tp: '', ttp: '', inr: '' }
+          labData: { na: '', k: '', cl: '', bun: '', cr: '', glu: '', wbc: '', hb: '', hct: '', plt: '', tp: '', ttp: '', inr: '' },
+          vitalData: { ta: '', temp: '', fc: '', uresis: '', drains: '' }
       });
       setFormData(prev => ({ ...prev, notes: updatedNotes }));
 
@@ -920,20 +935,16 @@ export default function UroRounds() {
                         </div>
 
                         <div className="flex flex-col gap-3">
-                             {/* LAB INPUT GRID - MOBILE OPTIMIZED */}
-                             {newNote.type === 'lab' ? (
+                             {/* LAB INPUT GRID */}
+                             {newNote.type === 'lab' && (
                                  <div className="bg-white border border-slate-200 rounded-lg p-2 animate-in fade-in">
                                      <h4 className="text-[10px] font-bold text-blue-600 uppercase mb-2">Ingresar Valores</h4>
-                                     
-                                     {/* BH - 4 COLS */}
                                      <div className="grid grid-cols-4 gap-2 mb-2 bg-slate-50 p-2 rounded">
                                          <Input label="WBC" placeholder="10.5" value={newNote.labData.wbc} onChange={e => updateLabData('wbc', e.target.value)} className="text-center"/>
                                          <Input label="Hb" placeholder="14" value={newNote.labData.hb} onChange={e => updateLabData('hb', e.target.value)} className="text-center"/>
                                          <Input label="Hct" placeholder="42" value={newNote.labData.hct} onChange={e => updateLabData('hct', e.target.value)} className="text-center"/>
                                          <Input label="Plt" placeholder="250" value={newNote.labData.plt} onChange={e => updateLabData('plt', e.target.value)} className="text-center"/>
                                      </div>
-
-                                     {/* CHEM - 4 COLS Mobile */}
                                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 mb-2 p-1">
                                          <Input label="Na" value={newNote.labData.na} onChange={e => updateLabData('na', e.target.value)} className="text-center"/>
                                          <Input label="K" value={newNote.labData.k} onChange={e => updateLabData('k', e.target.value)} className="text-center"/>
@@ -942,17 +953,33 @@ export default function UroRounds() {
                                          <Input label="BUN" value={newNote.labData.bun} onChange={e => updateLabData('bun', e.target.value)} className="text-center col-span-2 sm:col-span-1"/>
                                          <Input label="Cr" value={newNote.labData.cr} onChange={e => updateLabData('cr', e.target.value)} className="text-center col-span-2 sm:col-span-1 font-bold"/>
                                      </div>
-
-                                     {/* COAGS */}
                                      <div className="grid grid-cols-3 gap-2 border-t border-slate-100 pt-2">
                                          <Input label="TP" value={newNote.labData.tp} onChange={e => updateLabData('tp', e.target.value)} className="text-center"/>
                                          <Input label="TTP" value={newNote.labData.ttp} onChange={e => updateLabData('ttp', e.target.value)} className="text-center"/>
                                          <Input label="INR" value={newNote.labData.inr} onChange={e => updateLabData('inr', e.target.value)} className="text-center"/>
                                      </div>
-                                     
                                      <input type="text" className="w-full mt-2 border-b border-slate-200 text-xs py-1 outline-none" placeholder="Nota adicional (opcional)..." value={newNote.text} onChange={e => setNewNote({...newNote, text: e.target.value})} />
                                  </div>
-                             ) : (
+                             )}
+
+                             {/* VITALS INPUT GRID */}
+                             {newNote.type === 'vitals' && (
+                                 <div className="bg-white border border-rose-100 rounded-lg p-3 animate-in fade-in">
+                                     <h4 className="text-[10px] font-bold text-rose-600 uppercase mb-2 flex items-center gap-1"><Activity size={12}/> Signos Vitales</h4>
+                                     <div className="grid grid-cols-3 gap-3 mb-3">
+                                         <Input label="TA (mmHg)" placeholder="120/80" value={newNote.vitalData.ta} onChange={e => updateVitalData('ta', e.target.value)} className="text-center"/>
+                                         <Input label="FC (lpm)" type="number" placeholder="80" value={newNote.vitalData.fc} onChange={e => updateVitalData('fc', e.target.value)} className="text-center"/>
+                                         <Input label="Temp (°C)" type="number" placeholder="36.5" value={newNote.vitalData.temp} onChange={e => updateVitalData('temp', e.target.value)} className="text-center"/>
+                                     </div>
+                                     <div className="grid grid-cols-2 gap-3 pt-2 border-t border-rose-50">
+                                         <Input label="Uresis (ml)" type="number" placeholder="1500" value={newNote.vitalData.uresis} onChange={e => updateVitalData('uresis', e.target.value)} className="text-center font-bold text-blue-600"/>
+                                         <Input label="Drenajes / Otros" placeholder="Penrose: 20cc" value={newNote.vitalData.drains} onChange={e => updateVitalData('drains', e.target.value)} className="text-center"/>
+                                     </div>
+                                 </div>
+                             )}
+
+                             {/* DEFAULT TEXT INPUT */}
+                             {newNote.type !== 'lab' && newNote.type !== 'vitals' && (
                                  <textarea 
                                   className="w-full border border-slate-300 rounded-lg p-3 text-sm focus:border-blue-500 outline-none bg-white min-h-[80px]"
                                   placeholder={newNote.type === 'antibiotic' ? "Medicamento, dosis, intervalo..." : "Escribe aquí..."}
@@ -1022,7 +1049,8 @@ export default function UroRounds() {
                                    </div>
                                  </div>
 
-                                 {/* FISHBONE RENDER */}
+                                 {/* RENDER CONTENT BASED ON TYPE */}
+                                 
                                  {note.type === 'lab' && note.labData ? (
                                      <div className="overflow-x-auto">
                                          <div className="flex flex-wrap gap-4 items-start">
@@ -1031,6 +1059,25 @@ export default function UroRounds() {
                                          </div>
                                          <CoagBox data={note.labData} />
                                          {note.text && <p className="text-xs text-slate-500 mt-2 pt-1 border-t border-slate-50 italic">{note.text}</p>}
+                                     </div>
+                                 ) : note.type === 'vitals' && note.vitalData ? (
+                                     <div className="grid grid-cols-2 gap-2 text-xs text-slate-700 bg-slate-50 p-2 rounded border border-slate-100">
+                                         <div className="flex flex-col">
+                                             <span className="text-[9px] font-bold text-slate-400 uppercase">TA / FC</span>
+                                             <span className="font-mono font-bold">{note.vitalData.ta || '-'} <span className="text-slate-300">|</span> {note.vitalData.fc || '-'} lpm</span>
+                                         </div>
+                                         <div className="flex flex-col">
+                                             <span className="text-[9px] font-bold text-slate-400 uppercase">Temp</span>
+                                             <span className="font-mono font-bold">{note.vitalData.temp || '-'} °C</span>
+                                         </div>
+                                         <div className="flex flex-col border-t border-slate-200 pt-1 mt-1">
+                                             <span className="text-[9px] font-bold text-blue-400 uppercase">Uresis</span>
+                                             <span className="font-mono font-bold text-blue-700">{note.vitalData.uresis || '-'} ml</span>
+                                         </div>
+                                         <div className="flex flex-col border-t border-slate-200 pt-1 mt-1">
+                                             <span className="text-[9px] font-bold text-orange-400 uppercase">Drenajes</span>
+                                             <span className="font-mono font-bold">{note.vitalData.drains || '-'}</span>
+                                         </div>
                                      </div>
                                  ) : (
                                      <div className="text-xs text-slate-700 whitespace-pre-line leading-relaxed">
