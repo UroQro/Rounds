@@ -104,24 +104,16 @@ const calculateStayDays = (admitDate) => {
   return Math.round(Math.abs((now - start) / oneDay));
 };
 
-// Calcula días de antibiótico (Fecha actual - Inicio + 1)
 const calculateAntibioticDays = (startDate) => {
   if (!startDate) return 0;
-  
-  // Parseo manual para evitar problemas de zona horaria (UTC vs Local)
   const parts = startDate.split('-');
   if(parts.length !== 3) return 0;
-  
   const start = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
   const now = new Date();
-  
-  // Resetear horas para comparar solo días
   start.setHours(0,0,0,0);
   now.setHours(0,0,0,0);
-  
   const diffTime = now - start;
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  
   return diffDays + 1;
 };
 
@@ -288,7 +280,7 @@ export default function UroRounds() {
   };
   const [formData, setFormData] = useState(initialPatientState);
   
-  // Note State - Includes Lab Data Structure
+  // Note State
   const [newNote, setNewNote] = useState({ 
       text: '', 
       type: 'evolution', 
@@ -494,7 +486,6 @@ export default function UroRounds() {
     if(e) e.preventDefault(); 
     if (!selectedPatient) return;
     
-    // Validaciones simples
     if (newNote.type !== 'lab' && newNote.type !== 'image' && !newNote.text) return alert("Escribe algo.");
     if (newNote.type === 'lab' && !Object.values(newNote.labData).some(x => x)) return alert("Pon algún valor de lab.");
     if (newNote.type === 'image' && !newNote.link) return alert("Ingresa el link.");
@@ -507,7 +498,8 @@ export default function UroRounds() {
       abxStart: newNote.type === 'antibiotic' ? newNote.abxStart : null,
       labData: newNote.type === 'lab' ? newNote.labData : null,
       timestamp: new Date().toISOString(),
-      author: appUser?.username || 'Dr.'
+      author: appUser?.username || 'Dr.',
+      deleted: false
     };
 
     const currentNotes = formData.notes || [];
@@ -528,6 +520,33 @@ export default function UroRounds() {
       alert("Error al guardar nota.");
     } finally {
       setOperationLoading(false);
+    }
+  };
+
+  const handleDeleteNote = async (noteId) => {
+    if (!confirm('¿Eliminar esta nota? Quedará registro.')) return;
+    
+    try {
+        setOperationLoading(true);
+        const updatedNotes = formData.notes.map(n => {
+            if (n.id === noteId) {
+                return {
+                    ...n,
+                    deleted: true,
+                    deletedBy: appUser?.username || 'Dr.',
+                    deletedAt: new Date().toISOString()
+                };
+            }
+            return n;
+        });
+
+        const patientRef = doc(db, 'artifacts', appId, 'public', 'data', 'patients', selectedPatient.id);
+        await updateDoc(patientRef, { notes: updatedNotes });
+        setFormData(prev => ({ ...prev, notes: updatedNotes }));
+    } catch (e) {
+        alert("Error al eliminar nota.");
+    } finally {
+        setOperationLoading(false);
     }
   };
 
@@ -573,7 +592,7 @@ export default function UroRounds() {
     const escapeCsv = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
 
     const rows = dataToExport.map(p => {
-      const lastLabNote = p.notes?.find(n => n.type === 'lab');
+      const lastLabNote = p.notes?.find(n => n.type === 'lab' && !n.deleted);
       let lastLabText = '-';
       if (lastLabNote) {
           if (lastLabNote.labData) {
@@ -585,7 +604,7 @@ export default function UroRounds() {
       }
 
       const activeAbx = p.notes
-        ?.filter(n => n.type === 'antibiotic')
+        ?.filter(n => n.type === 'antibiotic' && !n.deleted)
         .map(n => `${n.text} (${n.abxStart ? formatDate(n.abxStart) : '?'})`)
         .join('; ') || '-';
 
@@ -705,7 +724,7 @@ export default function UroRounds() {
                   
                   {/* PREVIEW LABS CONDENSADO */}
                   {(() => {
-                      const lastLab = patient.notes?.find(n => n.type === 'lab' && n.labData);
+                      const lastLab = patient.notes?.find(n => n.type === 'lab' && n.labData && !n.deleted);
                       if (lastLab) {
                           const d = lastLab.labData;
                           return (d.wbc || d.cr) ? (
@@ -965,22 +984,41 @@ export default function UroRounds() {
                      {/* TIMELINE */}
                      <div className="space-y-4 pl-2">
                         {formData.notes && formData.notes.length > 0 ? formData.notes.map((note, idx) => {
+                          if (note.deleted) {
+                              return (
+                                <div key={idx} className="pl-4 border-l-2 border-red-100 opacity-60">
+                                    <div className="bg-slate-50 p-2 rounded text-[10px] text-red-400 italic">
+                                        Nota eliminada por Dr. {note.deletedBy} el {formatDateTime(note.deletedAt)}
+                                    </div>
+                                </div>
+                              );
+                          }
+
                           const typeInfo = NOTE_TYPES.find(t => t.id === note.type) || NOTE_TYPES[0];
                           const Icon = typeInfo.icon;
                           
                           return (
-                            <div key={idx} className="relative pl-4 border-l-2 border-slate-100">
+                            <div key={idx} className="relative pl-4 border-l-2 border-slate-100 group">
                                <div className={`absolute -left-[5px] top-0 w-2.5 h-2.5 rounded-full border-2 border-white shadow-sm ${note.type === 'antibiotic' ? 'bg-purple-500' : 'bg-slate-300'}`}></div>
                                
-                               <div className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm">
+                               <div className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm relative">
                                  <div className="flex justify-between items-start mb-2">
                                    <div className="flex items-center gap-1.5">
                                       <Icon size={14} className={typeInfo.color} />
                                       <span className={`text-[10px] font-bold uppercase ${typeInfo.color}`}>{typeInfo.label}</span>
                                    </div>
-                                   <div className="text-right leading-none">
-                                      <div className="text-[10px] font-bold text-slate-700">{formatDateTime(note.timestamp)}</div>
-                                      <div className="text-[9px] text-slate-400">Dr. {note.author}</div>
+                                   <div className="flex items-center gap-2">
+                                        <div className="text-right leading-none">
+                                            <div className="text-[10px] font-bold text-slate-700">{formatDateTime(note.timestamp)}</div>
+                                            <div className="text-[9px] text-slate-400">Dr. {note.author}</div>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleDeleteNote(note.id)}
+                                            className="text-slate-300 hover:text-red-400 transition-colors p-1"
+                                            title="Eliminar nota"
+                                        >
+                                            <X size={14} /> 
+                                        </button>
                                    </div>
                                  </div>
 
