@@ -45,7 +45,11 @@ import {
   Droplet,
   ChevronDown,
   ChevronUp,
-  Thermometer
+  Thermometer,
+  ListTodo,
+  CheckSquare,
+  Square,
+  RotateCcw
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -79,15 +83,29 @@ const CATEGORIES = [
   "Otro"
 ];
 
+const ANTECEDENTS_OPTIONS = [
+  "Diabetes",
+  "Hipertensión",
+  "Tóxicos",
+  "V24",
+  "Otros"
+];
+
 const NOTE_TYPES = [
   { id: 'evolution', label: 'Evol.', icon: FileText, color: 'text-slate-600' },
-  { id: 'vitals', label: 'Vitales', icon: Activity, color: 'text-rose-500' }, // Nuevo tipo
+  { id: 'vitals', label: 'Vitales', icon: Activity, color: 'text-rose-500' }, 
   { id: 'lab', label: 'Labs', icon: Microscope, color: 'text-blue-600' },
   { id: 'culture', label: 'Cultivo', icon: FlaskConical, color: 'text-pink-600' },
   { id: 'antibiotic', label: 'ABX', icon: Syringe, color: 'text-purple-600' },
   { id: 'procedure', label: 'Proc.', icon: Scissors, color: 'text-orange-600' },
   { id: 'image', label: 'Img', icon: ImageIcon, color: 'text-green-600' },
 ];
+
+const normalizeText = (text) => {
+  if (!text) return '';
+  // Elimina acentos y caracteres especiales
+  return text.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+};
 
 const calculateAge = (dob) => {
   if (!dob) return '';
@@ -264,6 +282,9 @@ export default function UroRounds() {
   const [adminPass, setAdminPass] = useState('');
   const [loginError, setLoginError] = useState('');
 
+  // To-Do State
+  const [newTodo, setNewTodo] = useState('');
+
   // Forms
   const initialPatientState = {
     name: '',
@@ -278,11 +299,13 @@ export default function UroRounds() {
     history: '',
     allergies: '',
     status: 'active',
+    isReentry: false, // Nuevo campo Reingreso
     notes: [],
+    todos: [] // Nuevo campo ToDos
   };
   const [formData, setFormData] = useState(initialPatientState);
   
-  // Note State - Includes Lab and Vital Data
+  // Note State
   const [newNote, setNewNote] = useState({ 
       text: '', 
       type: 'evolution', 
@@ -350,6 +373,7 @@ export default function UroRounds() {
            setFormData(prev => ({
              ...prev, 
              notes: updated.notes || [],
+             todos: updated.todos || [], // Sync ToDos
              status: updated.status,
              ...(!isEditingDetails ? {
                name: updated.name,
@@ -362,7 +386,8 @@ export default function UroRounds() {
                surgery: updated.surgery,
                category: updated.category,
                history: updated.history,
-               allergies: updated.allergies
+               allergies: updated.allergies,
+               isReentry: updated.isReentry || false
              } : {})
            })); 
         } else if (isModalOpen && !dischargeTarget) { 
@@ -457,7 +482,8 @@ export default function UroRounds() {
           surgery: formData.surgery,
           category: formData.category,
           history: formData.history,
-          allergies: formData.allergies
+          allergies: formData.allergies,
+          isReentry: formData.isReentry
       };
 
       if (selectedPatient) {
@@ -468,6 +494,7 @@ export default function UroRounds() {
           ...payload,
           status: 'active',
           notes: [],
+          todos: [],
           createdAt: serverTimestamp()
         });
         setSelectedPatient({ id: docRef.id, ...formData });
@@ -492,6 +519,66 @@ export default function UroRounds() {
           ...prev,
           vitalData: { ...prev.vitalData, [field]: value }
       }));
+  };
+
+  const handleHistorySelect = (e) => {
+      const value = e.target.value;
+      if (!value) return;
+      
+      // Simple logic: append if not exists
+      const current = formData.history || '';
+      if (!current.includes(value)) {
+          const updated = current ? `${current}, ${value}` : value;
+          setFormData({ ...formData, history: updated });
+      }
+      // Reset select
+      e.target.value = '';
+  };
+
+  // --- TODO LOGIC ---
+  const handleAddTodo = async (e) => {
+      e.preventDefault();
+      if (!newTodo.trim() || !selectedPatient) return;
+      
+      const newItem = {
+          id: crypto.randomUUID(),
+          text: newTodo,
+          done: false,
+          createdAt: new Date().toISOString()
+      };
+      
+      const updatedTodos = [...(formData.todos || []), newItem];
+      
+      try {
+          // Optimistic
+          setFormData(prev => ({ ...prev, todos: updatedTodos }));
+          setNewTodo('');
+          const ref = doc(db, 'artifacts', appId, 'public', 'data', 'patients', selectedPatient.id);
+          await updateDoc(ref, { todos: updatedTodos });
+      } catch (err) {
+          console.error(err);
+      }
+  };
+
+  const toggleTodo = async (todoId) => {
+      const updatedTodos = formData.todos.map(t => 
+          t.id === todoId ? { ...t, done: !t.done } : t
+      );
+      
+      try {
+          setFormData(prev => ({ ...prev, todos: updatedTodos }));
+          const ref = doc(db, 'artifacts', appId, 'public', 'data', 'patients', selectedPatient.id);
+          await updateDoc(ref, { todos: updatedTodos });
+      } catch (err) { console.error(err); }
+  };
+
+  const deleteTodo = async (todoId) => {
+      const updatedTodos = formData.todos.filter(t => t.id !== todoId);
+      try {
+          setFormData(prev => ({ ...prev, todos: updatedTodos }));
+          const ref = doc(db, 'artifacts', appId, 'public', 'data', 'patients', selectedPatient.id);
+          await updateDoc(ref, { todos: updatedTodos });
+      } catch (err) { console.error(err); }
   };
 
   const handleAddNote = async (e) => {
@@ -599,12 +686,12 @@ export default function UroRounds() {
 
   const downloadCSV = (dataToExport) => {
     const headers = [
-      "Cama", "Tipo", "Nombre", "Expediente", "Ingreso", "Días", 
-      "Edad", "Diagnóstico", "Categoría", "Cirugía", "Crónicos/Alergias", 
-      "Labs Resumen", "Antibióticos"
+      "Cama", "Tipo", "Reingreso", "Nombre", "Expediente", "Ingreso", "Dias", 
+      "Edad", "Diagnostico", "Categoria", "Cirugia", "Cronicos/Alergias", 
+      "Labs Resumen", "Antibioticos", "Pendientes"
     ];
 
-    const escapeCsv = (txt) => `"${(txt || '').toString().replace(/"/g, '""')}"`;
+    const escapeCsv = (txt) => `"${(normalizeText(txt || '')).replace(/"/g, '""')}"`;
 
     const rows = dataToExport.map(p => {
       const lastLabNote = p.notes?.find(n => n.type === 'lab' && !n.deleted);
@@ -623,17 +710,19 @@ export default function UroRounds() {
         .map(n => `${n.text} (${n.abxStart ? formatDate(n.abxStart) : '?'})`)
         .join('; ') || '-';
 
+      const pendingTodos = p.todos?.filter(t => !t.done).map(t => t.text).join('; ') || '-';
+
       return [
-        p.bed, p.type, p.name, p.fileNumber, formatDate(p.admissionDate),
+        p.bed, p.type, p.isReentry ? "SI" : "NO", p.name, p.fileNumber, formatDate(p.admissionDate),
         calculateStayDays(p.admissionDate), calculateAge(p.dob), p.diagnosis,
-        p.category, p.surgery, `${p.history} / ${p.allergies}`, lastLabText, activeAbx
+        p.category, p.surgery, `${p.history} / ${p.allergies}`, lastLabText, activeAbx, pendingTodos
       ].map(escapeCsv).join(',');
     });
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
     const link = document.createElement("a");
     link.setAttribute("href", encodeURI(csvContent));
-    link.setAttribute("download", `Censo_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `Censo_UroRounds.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -730,6 +819,7 @@ export default function UroRounds() {
                     <div className="flex items-center gap-1.5">
                       <span className="font-mono text-base font-bold text-slate-700 bg-slate-100 px-1.5 rounded">{patient.bed}</span>
                       {patient.type === 'IC' && <span className="text-[9px] font-bold uppercase bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full">IC</span>}
+                      {patient.isReentry && <span className="text-[9px] font-bold uppercase bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full animate-pulse">REINGRESO</span>}
                     </div>
                     <span className="text-[10px] font-bold text-slate-400">{calculateStayDays(patient.admissionDate)}d</span>
                   </div>
@@ -845,7 +935,7 @@ export default function UroRounds() {
             <div className="flex-grow overflow-y-auto bg-slate-50 pb-20 sm:pb-0">
               <div className="max-w-4xl mx-auto p-3 sm:p-6 space-y-4">
 
-                {/* ID SECTION - COLLAPSIBLE ON MOBILE OPTIONAL OR JUST DENSE */}
+                {/* ID SECTION */}
                 <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 sm:p-5">
                   <div className="flex justify-between items-center mb-3">
                     <h3 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
@@ -865,6 +955,21 @@ export default function UroRounds() {
                     <div className="col-span-1 md:col-span-2">
                       <Select label="Servicio" readOnly={!isEditingDetails} options={['HO', 'IC']} value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})} />
                     </div>
+                    
+                    {/* CHECKBOX REINGRESO */}
+                    <div className="col-span-2 md:col-span-8 flex items-end pb-2">
+                        <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer select-none">
+                            <input 
+                                type="checkbox" 
+                                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                                checked={formData.isReentry || false}
+                                disabled={!isEditingDetails && selectedPatient}
+                                onChange={e => setFormData({...formData, isReentry: e.target.checked})}
+                            />
+                            ¿Es Reingreso?
+                        </label>
+                    </div>
+
                     <div className="col-span-2 md:col-span-5">
                       <Input label="Nombre" readOnly={!isEditingDetails} value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
                     </div>
@@ -895,11 +1000,25 @@ export default function UroRounds() {
                       <Input label="Cirugía" readOnly={!isEditingDetails} value={formData.surgery} onChange={e => setFormData({...formData, surgery: e.target.value})} />
                     </div>
                     
+                    {/* ANTECEDENTES (Dropdown + Textarea) */}
                     <div className="col-span-2 md:col-span-6">
-                       <label className="text-[10px] font-bold text-slate-500 uppercase">Antecedentes</label>
+                       <div className="flex justify-between items-end mb-0.5">
+                           <label className="text-[10px] font-bold text-slate-500 uppercase">Antecedentes</label>
+                           {isEditingDetails && (
+                               <select 
+                                   className="text-[10px] border border-slate-300 rounded px-1 bg-white outline-none"
+                                   onChange={handleHistorySelect}
+                                   value=""
+                               >
+                                   <option value="">+ Agregar...</option>
+                                   {ANTECEDENTS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                               </select>
+                           )}
+                       </div>
                        <textarea className={`w-full border rounded-md px-2 py-1 text-xs mt-0.5 outline-none resize-none ${!isEditingDetails ? 'bg-slate-50 border-transparent text-slate-700' : 'bg-white border-slate-300'}`}
                          readOnly={!isEditingDetails} rows={2} value={formData.history} onChange={e => setFormData({...formData, history: e.target.value})} />
                     </div>
+
                     <div className="col-span-2 md:col-span-6">
                        <label className="text-[10px] font-bold text-red-400 uppercase">Alergias</label>
                        <textarea className={`w-full border rounded-md px-2 py-1 text-xs mt-0.5 outline-none resize-none text-red-600 font-medium ${!isEditingDetails ? 'bg-red-50 border-transparent' : 'bg-white border-red-100'}`}
@@ -1103,6 +1222,46 @@ export default function UroRounds() {
                         )}
                      </div>
                   </section>
+                )}
+
+                {/* --- TO-DO LIST MODULE --- */}
+                {selectedPatient && (
+                    <section className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 sm:p-5 mb-12">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase mb-3 flex items-center gap-2">
+                            <ListTodo size={14} /> Pendientes / To-Do
+                        </h3>
+                        
+                        <form onSubmit={handleAddTodo} className="flex gap-2 mb-4">
+                            <input 
+                                type="text" 
+                                className="flex-grow border border-slate-300 rounded-lg px-3 py-2 text-xs outline-none focus:border-blue-500"
+                                placeholder="Nuevo pendiente (ej. Valoración Cardio)..."
+                                value={newTodo}
+                                onChange={(e) => setNewTodo(e.target.value)}
+                            />
+                            <Button type="submit" variant="secondary" className="px-3"><Plus size={16}/></Button>
+                        </form>
+
+                        <div className="space-y-2">
+                            {formData.todos && formData.todos.length > 0 ? (
+                                formData.todos.map((todo) => (
+                                    <div key={todo.id} className="flex items-center gap-3 p-2 bg-slate-50 rounded border border-slate-100 group">
+                                        <button onClick={() => toggleTodo(todo.id)} className="text-slate-400 hover:text-blue-600">
+                                            {todo.done ? <CheckSquare size={18} className="text-blue-600"/> : <Square size={18}/>}
+                                        </button>
+                                        <span className={`flex-grow text-xs ${todo.done ? 'line-through text-slate-400' : 'text-slate-700 font-medium'}`}>
+                                            {todo.text}
+                                        </span>
+                                        <button onClick={() => deleteTodo(todo.id)} className="text-slate-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <X size={16}/>
+                                        </button>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-center text-slate-300 text-xs italic py-2">No hay pendientes activos</p>
+                            )}
+                        </div>
+                    </section>
                 )}
               </div>
             </div>
